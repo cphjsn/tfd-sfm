@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TFD-SfM: Track-Free Dense Structure from Motion</title>
+  <meta name="description" content="TFD-SfM jointly optimizes camera poses, focal lengths and dense geometry from a strict cold start, with probabilistic Gaussian landmarks instead of point tracks. WACV 2027.">
+  <!-- TODO before publishing: og:image / twitter:card with an absolute URL of assets/figures/teaser.jpg -->
+  <meta property="og:title" content="TFD-SfM: Track-Free Dense Structure from Motion">
+  <meta property="og:description" content="Dense SfM from identity cameras and unit depths, without point tracks. WACV 2027.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;700&family=Source+Serif+4:wght@700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.4/css/bulma.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+  <!-- ?v=N on the page's own CSS/JS: bump it (here, below and in static/js/gallery.js) after an
+       edit, so that browsers do not keep running a cached copy -->
+  <link rel="stylesheet" href="static/css/index.css?v=11">
+  <link rel="icon" href="static/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<!-- ============================== TITLE ============================== -->
+<section class="hero">
+  <div class="hero-body">
+    <div class="container is-max-desktop has-text-centered">
+      <h1 class="title is-1 publication-title">Track-Free Dense Structure from Motion</h1>
+      <!-- TODO: author homepages -->
+      <div class="is-size-5 publication-authors">
+        <span class="author-block"><a href="#">Pak Hong Chui</a><sup>1,2</sup></span>
+        <span class="author-block"><a href="#">Hector Andrade-Loarca</a><sup>1,2</sup></span>
+        <span class="author-block"><a href="https://cvg.cit.tum.de/members/cremers">Daniel Cremers</a><sup>1,2</sup></span>
+      </div>
+      <div class="is-size-6 publication-affiliations">
+        <span class="author-block"><sup>1</sup>Technical University of Munich</span>
+        <span class="author-block"><sup>2</sup>Munich Center for Machine Learning (MCML)</span>
+      </div>
+      <div class="publication-venue">WACV 2027</div>
+
+      <!-- TODO: paper / arXiv / code links -->
+      <div class="publication-links">
+        <a class="button is-rounded is-dark" href="#"><span class="icon"><i class="fas fa-file-pdf"></i></span><span>Paper</span></a>
+        <a class="button is-rounded is-dark" href="#"><span class="icon"><i class="ai ai-arxiv"></i></span><span>arXiv</span></a>
+        <a class="button is-rounded is-dark is-disabled" href="#" title="Code release coming soon" aria-disabled="true"><span class="icon"><i class="fab fa-github"></i></span><span>Code (coming soon)</span></a>
+        <a class="button is-rounded is-dark" href="#bibtex"><span class="icon"><i class="fas fa-quote-right"></i></span><span>BibTeX</span></a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== TEASER ============================== -->
+<section class="section teaser">
+  <div class="container is-max-widescreen">
+    <div class="teaser-caption">
+      <p class="no-priors">
+        <span><i class="fas fa-xmark"></i> poses prior</span>
+        <span><i class="fas fa-xmark"></i> scene prior</span>
+        <span><i class="fas fa-xmark"></i> intrinsic prior</span>
+      </p>
+      <p><span class="key-est">Orange</span>: estimated cameras</p>
+      <p><span class="key-gt">Green</span>: ground-truth cameras</p>
+    </div>
+    <div class="teaser-grid" id="teaserGrid"><!-- filled by static/js/gallery.js --></div>
+  </div>
+</section>
+
+<!-- ============================== ABSTRACT ============================== -->
+<section class="section">
+  <div class="container is-max-desktop">
+    <h2 class="title is-3 has-text-centered">Abstract</h2>
+    <div class="content has-text-justified">
+      <p>
+        Classical Bundle Adjustment (BA) relies on precise metric initialization and known camera
+        intrinsics, and traditional Structure-from-Motion (SfM) pipelines struggle to exploit modern
+        dense matchers because rigid track-building heuristics break down under their inherent noise.
+        We present Track-Free Dense Structure from Motion (TFD-SfM), which jointly optimizes camera
+        extrinsics, focal lengths, and geometry from a strict cold start. Our central idea is to relax
+        the rigidities of classical SfM into soft, probabilistic decisions under Negative
+        Log-Likelihood (NLL) objectives. Instead of forcing matched pixels onto a single shared 3D
+        point, we model each match as a 3D Gaussian whose variance is optimized jointly with the
+        geometry. Unreliable matches take on large variance and contribute little to the loss,
+        smoothing the optimization landscape so the solver converges even from identity cameras and
+        uniform depths. A kinematic relative-pose parameterization stabilizes the cold start, and a
+        dual-hypothesis mechanism resolves the mirror-symmetry ambiguity that otherwise traps
+        object-centric scenes. Across DTU, Mip-NeRF&nbsp;360, ETH3D, and IMC2021, TFD-SfM is
+        competitive with both classical and learning-based SfM baselines and leads on ETH3D,
+        recovering accurate camera poses, intrinsics, and dense geometry from unordered, uncalibrated
+        image collections.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== METHOD ============================== -->
+<section class="section" id="method">
+  <div class="container is-max-desktop">
+    <h2 class="title is-3 has-text-centered">Method</h2>
+    <figure class="figure">
+      <img src="assets/figures/overview.jpg" alt="TFD-SfM system overview" loading="lazy">
+      <figcaption>
+        From unordered images, three stages: (1) view-graph construction with LoFTR (solid:
+        spanning-tree edges, dashed: auxiliary edges), (2) dense correspondences with DKM, and
+        (3) the TFD-SfM optimization from a strict cold start, which outputs intrinsics, absolute
+        poses and a 3D reconstruction.
+      </figcaption>
+    </figure>
+
+  </div>
+
+  <!-- the key ideas side by side, in a wider container than the rest of the section;
+       media from scripts/render_toy_gif.py, render_tree_gif.py and render_mirror_gif.py (see README) -->
+  <div class="container is-max-widescreen ideas">
+    <div class="idea-card">
+      <h3 class="title is-5">Key idea 1: Gaussian landmarks, not tracks</h3>
+      <p>
+        Each match is its own 3D Gaussian with a learned variance. From the cold start, the two
+        Gaussians of one match move together and shrink onto the same point.
+      </p>
+      <img src="assets/media/method/toy_landmarks.gif?v=8" alt="Toy example: the two Gaussians of one wide-baseline match start far apart and meet while the ring of cameras is recovered" loading="lazy">
+    </div>
+    <div class="idea-card">
+      <h3 class="title is-5">Key idea 2: Relative poses on a spanning tree</h3>
+      <p>
+        We optimize the relative pose of each spanning-tree edge of the view graph, and chain them into
+        the camera poses.
+      </p>
+      <img src="assets/media/method/eth3d_poses.gif?v=3" alt="ETH3D delivery_area from a cold start: absolute poses stay broken, relative poses on a spanning tree close the camera loop" loading="lazy">
+    </div>
+    <div class="idea-card">
+      <h3 class="title is-5">Key idea 3: Two worlds against the mirror ambiguity</h3>
+      <p>
+        Optimizing from a cold start, it is easy to fall into the mirror solution and never come back.
+        We therefore optimize two worlds, the second started as the mirror image of the first, and keep
+        the one with the higher likelihood.
+      </p>
+      <img src="assets/media/method/mirror_worlds.gif?v=7" alt="The two reconstructions of DTU scan82 on a turntable: convex and kept, concave and discarded" loading="lazy">
+    </div>
+  </div>
+</section>
+
+<!-- ============================== GALLERY ============================== -->
+<section class="section gallery" id="gallery">
+  <div class="container is-max-widescreen">
+    <h2 class="title is-3 has-text-centered">Reconstructions from a cold start</h2>
+    <p class="gallery-intro">
+      Every scene of the four benchmarks, optimized for 10k iterations and replayed in 3D: drag to
+      orbit, scroll to zoom, and scrub the slider through the iterations. Each frame is centered and
+      scaled to fit, since the scene grows from unit depth, and 20k of the matches are shown. The
+      numbers below each run are its relative rotation and translation accuracy at 5&deg; (the paper
+      reports 30k iterations).
+    </p>
+    <div class="tabs is-centered is-toggle is-small dataset-tabs" id="datasetTabs"><ul></ul></div>
+    <p class="dataset-note" id="datasetNote"></p>
+    <div class="player-wrap">
+      <div class="viewer-wrap">
+        <canvas id="viewerCanvas"></canvas>
+        <div class="viewer-status" id="viewerStatus" hidden>Loading…</div>
+        <!-- the scene's last frame until it is clicked: the replay (~6.5 MB) loads on demand -->
+        <button class="viewer-placeholder" id="viewerPlaceholder" type="button">
+          <img id="viewerPoster" alt="">
+          <span class="play-3d"><i class="fas fa-play"></i>&nbsp; Play in 3D</span>
+        </button>
+      </div>
+      <div class="viewer-controls is-idle">
+        <button class="button is-small is-dark" id="viewerPlay">Pause</button>
+        <input type="range" id="viewerSlider" min="0" max="49" step="0.01" value="0" aria-label="Iteration">
+        <span class="viewer-iteration" id="viewerIteration">iteration 0</span>
+        <button class="button is-small is-dark" id="viewerReset" title="Reset the view"><i class="fas fa-rotate-left"></i></button>
+      </div>
+    </div>
+    <p class="scene-caption" id="sceneCaption"></p>
+    <div class="thumbs" id="sceneThumbs" role="group" aria-label="Scene selector"></div>
+    <noscript><p>Enable JavaScript to browse the scenes.</p></noscript>
+  </div>
+</section>
+
+<!-- ============================== RESULTS ============================== -->
+<section class="section" id="results">
+  <div class="container is-max-desktop">
+    <h2 class="title is-3 has-text-centered">Results</h2>
+    <p class="table-caption">
+      Relative rotation and translation accuracy at 5&deg; (RRA, RTA) and pose AUC at 10&deg;, averaged
+      over each benchmark. <b>Bold</b>: best, <u>underlined</u>: second best within each group.
+    </p>
+    <div class="table-container">
+      <table class="table is-narrow is-hoverable results-table">
+        <thead>
+          <tr><th rowspan="2">Method</th><th colspan="3">DTU</th><th colspan="3">Mip-NeRF 360</th><th colspan="3">ETH3D</th><th colspan="3">IMC2021</th></tr>
+          <tr><th>RRA</th><th>RTA</th><th>AUC</th><th>RRA</th><th>RTA</th><th>AUC</th><th>RRA</th><th>RTA</th><th>AUC</th><th>RRA</th><th>RTA</th><th>AUC</th></tr>
+        </thead>
+        <tbody>
+          <!-- rows from scripts/paper_table.py (sec/experiments.tex, tab:aggregated_results_all_horizontal) -->
+          <tr class="group"><td colspan="13">With deep scene prior</td></tr>
+          <tr><th>MASt3R-SfM</th><td class="second">99.6</td><td class="second">98.1</td><td class="second">85.1</td><td class="second">87.1</td><td class="second">82.2</td><td class="second">67.0</td><td class="second">78.9</td><td class="second">74.3</td><td class="best">66.5</td><td class="second">75.1</td><td class="second">69.2</td><td class="second">67.1</td></tr>
+          <tr><th>VGGT</th><td class="best">100.0</td><td class="best">100.0</td><td class="best">90.8</td><td class="best">99.9</td><td class="best">95.1</td><td class="best">82.4</td><td class="best">96.2</td><td class="best">81.1</td><td class="second">53.9</td><td class="best">100.0</td><td class="best">81.1</td><td class="best">72.6</td></tr>
+          <tr class="group"><td colspan="13">Without deep scene prior</td></tr>
+          <tr><th>COLMAP</th><td>87.3</td><td>74.6</td><td>65.8</td><td class="best">100.0</td><td class="best">100.0</td><td class="best">97.9</td><td class="second">90.6</td><td class="second">89.2</td><td class="second">84.8</td><td>85.3</td><td>65.3</td><td>58.9</td></tr>
+          <tr><th>COLMAP + DKM</th><td class="second">97.1</td><td class="best">93.2</td><td class="best">83.7</td><td>79.1</td><td>79.1</td><td>77.6</td><td>77.1</td><td>59.3</td><td>51.0</td><td class="second">94.3</td><td class="second">75.3</td><td class="second">67.4</td></tr>
+          <tr><th>COLMAP + RoMa</th><td>96.6</td><td class="best">93.2</td><td class="best">83.7</td><td>83.2</td><td>83.2</td><td>81.6</td><td>72.6</td><td>60.1</td><td>52.0</td><td class="best">95.1</td><td class="best">78.0</td><td class="best">69.7</td></tr>
+          <tr><th>pOSE</th><td>64.0</td><td>65.1</td><td>59.7</td><td>3.3</td><td>2.1</td><td>0.9</td><td>3.7</td><td>2.8</td><td>0.9</td><td>49.9</td><td>31.7</td><td>28.4</td></tr>
+          <tr><th>PoVar</th><td>69.7</td><td>69.9</td><td>64.8</td><td>4.8</td><td>2.4</td><td>0.9</td><td>2.7</td><td>1.0</td><td>0.4</td><td>48.6</td><td>28.0</td><td>23.9</td></tr>
+          <tr><th>pOSE + DKM</th><td>13.6</td><td>14.6</td><td>11.1</td><td>2.5</td><td>1.6</td><td>0.8</td><td>6.8</td><td>4.3</td><td>2.8</td><td>55.3</td><td>29.8</td><td>26.1</td></tr>
+          <tr><th>PoVar + DKM</th><td>20.2</td><td>20.9</td><td>15.8</td><td>4.4</td><td>1.8</td><td>0.8</td><td>6.0</td><td>2.0</td><td>1.6</td><td>42.3</td><td>20.3</td><td>18.3</td></tr>
+          <tr class="ours"><th>TFD-SfM (ours)</th><td class="best">97.9</td><td class="second">83.1</td><td class="second">75.0</td><td class="second">99.6</td><td class="second">98.5</td><td class="second">94.0</td><td class="best">96.9</td><td class="best">90.1</td><td class="best">85.0</td><td>71.2</td><td>39.5</td><td>37.1</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <figure class="figure">
+      <img src="assets/figures/qualitative.jpg" alt="Qualitative comparison" loading="lazy">
+      <figcaption>
+        Estimated (red) and ground-truth (grey) cameras with the point clouds on DTU, Mip-NeRF 360,
+        ETH3D and IMC2021. Left to right: input, COLMAP, COLMAP+DKM, COLMAP+RoMa, MASt3R-SfM, VGGT
+        and TFD-SfM.
+      </figcaption>
+    </figure>
+
+    <div class="columns">
+      <div class="column"><img src="assets/figures/runtime_perstep.png" alt="Runtime per step" loading="lazy"></div>
+      <div class="column"><img src="assets/figures/runtime_mip360.png" alt="Runtime vs. number of views" loading="lazy"></div>
+    </div>
+    <p class="table-caption">
+      Left: cost of one differentiable bundle-adjustment step against the correspondence count.
+      Right: end-to-end runtime against the number of views on Mip-NeRF 360.
+    </p>
+  </div>
+</section>
+
+<!-- ============================== BIBTEX ============================== -->
+<section class="section" id="bibtex">
+  <div class="container is-max-desktop">
+    <h2 class="title is-3">BibTeX</h2>
+    <!-- TODO: replace with the proceedings entry once WACV 2027 is published -->
+    <pre><code>@inproceedings{chui2027tfdsfm,
+  title     = {Track-Free Dense Structure from Motion},
+  author    = {Chui, Pak Hong and Andrade-Loarca, Hector and Cremers, Daniel},
+  booktitle = {Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)},
+  year      = {2027}
+}</code></pre>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="container is-max-desktop has-text-centered">
+    <p>Technical University of Munich &middot; Munich Center for Machine Learning</p>
+  </div>
+</footer>
+
+<script src="data/scenes.js?v=11"></script>
+<script type="importmap">
+  {"imports": {"three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+               "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+<script type="module" src="static/js/gallery.js?v=11"></script>
+</body>
+</html>
